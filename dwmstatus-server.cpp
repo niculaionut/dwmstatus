@@ -127,7 +127,7 @@ run_meta_response()
         (do_response(&resp_table[indexes]), ...);
 }
 
-/* consetval function definitions */
+/* constexpr function definitions */
 constexpr Response
 make_shell_response(const char* command, char* buffer)
 {
