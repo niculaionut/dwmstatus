@@ -288,7 +288,7 @@ toggle_mic(char* output_buf)
 void
 terminator()
 {
-        fmt::print(stderr, "Received id 0. Terminating...\n");
+        fmt::print(stderr, "handle_received(): Got id 0. Terminating...\n");
         running = false;
 }
 
@@ -442,7 +442,13 @@ handle_received(const std::uint32_t id)
 {
         if(id >= rt_responses.size())
         {
-                fmt::print(stderr, "Received id out of bounds: {}\n", id);
+                fmt::print(
+                    stderr,
+                    "handle_received(): Received id out of bounds: {}. Size is: {}.\n",
+                    id,
+                    rt_responses.size()
+                );
+
                 return;
         }
 
