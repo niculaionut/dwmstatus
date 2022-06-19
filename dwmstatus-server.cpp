@@ -454,7 +454,7 @@ void
 cleanup_and_exit(const int)
 {
         unlink(SOCKET_NAME.data());
-        exit(EXIT_SUCCESS);
+        _exit(EXIT_SUCCESS);
 }
 
 void
