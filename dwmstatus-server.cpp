@@ -506,7 +506,7 @@ run()
                 {
                         fmt::print(
                             stderr,
-                            "Received {} out of {} bytes wanted for index\n",
+                            "read(): Received {} out of {} bytes needed for table index\n",
                             ret,
                             sizeof(id)
                         );
