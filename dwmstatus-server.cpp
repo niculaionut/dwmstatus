@@ -502,6 +502,7 @@ run()
                 {
                         cexit("read");
                 }
+
                 if(ret != sizeof(id))
                 {
                         fmt::print(
@@ -511,8 +512,11 @@ run()
                             sizeof(id)
                         );
                 }
+                else
+                {
+                        handle_received(id);
+                }
 
-                handle_received(id);
                 close(datafd);
         }
 
