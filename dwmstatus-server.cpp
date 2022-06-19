@@ -4,6 +4,7 @@
 #include <numeric>
 #include <fmt/core.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #ifndef NO_X11
@@ -84,6 +85,8 @@ static void setup();
 static void init_statusbar();
 static void set_root();
 static void handle_received(const std::uint32_t id);
+static void cleanup_and_exit(const int);
+static void run();
 
 /* struct definitions */
 struct Response
@@ -174,7 +177,7 @@ exec_cmd(const char* cmd, char* output_buf)
         FILE* pipe = popen(cmd, "r");
         if(pipe == nullptr)
         {
-                exit(EXIT_FAILURE);
+                cexit("popen");
         }
 
         output_buf[0] = '\0';
@@ -242,7 +245,7 @@ toggle_lang(char* output_buf)
 
         idx = !idx;
         std::system(commands[idx]);
-        memcpy(output_buf, ltable[idx].data(), ltable[idx].size() + 1);
+        memcpy(output_buf, ltable[idx].data(), 2);
 }
 
 void
@@ -262,7 +265,7 @@ toggle_cpu_gov(char* output_buf)
 
         idx = !idx;
         std::system(commands[idx]);
-        memcpy(output_buf, freq_table[idx].data(), freq_table[idx].size() + 1);
+        memcpy(output_buf, freq_table[idx].data(), 1);
 }
 
 void
@@ -279,13 +282,13 @@ toggle_mic(char* output_buf)
 
         idx = !idx;
         std::system(command);
-        memcpy(output_buf, mic_status_table[idx].data(), mic_status_table[idx].size() + 1);
+        memcpy(output_buf, mic_status_table[idx].data(), 1);
 }
 
 void
 terminator()
 {
-        fprintf(stderr, "Received id 0. Terminating...\n");
+        fmt::print(stderr, "Received id 0. Terminating...\n");
         running = false;
 }
 
@@ -379,14 +382,15 @@ static const std::vector<const Response*> rt_responses = {
 void
 setup()
 {
-        unlink(SOCKET_NAME.data());
+        signal(SIGTERM, &cleanup_and_exit);
+        signal(SIGINT,  &cleanup_and_exit);
 
 #ifndef NO_X11
         dpy = XOpenDisplay(nullptr);
         if(!dpy)
         {
-                fprintf(stderr, "dwmstatus-server: Failed to open display\n");
-                std::exit(EXIT_FAILURE);
+                fmt::print(stderr, "XOpenDisplay(): Failed to open display\n");
+                exit(EXIT_FAILURE);
         }
         screen = DefaultScreen(dpy);
         root = RootWindow(dpy, screen);
@@ -405,6 +409,8 @@ init_statusbar()
         {
                 do_response(&r);
         }
+
+        set_root();
 }
 
 void
@@ -417,7 +423,7 @@ set_root()
             {
                     return fmt::format_to_n(buf.data(),
                                             BUFFER_MAX_SIZE,
-                                            fmt_format_str.data(),
+                                            std::string_view(fmt_format_str.data()),
                                             std::string_view(args.data())...);
             },
             buffers);
@@ -427,7 +433,7 @@ set_root()
         XStoreName(dpy, root, buf.data());
         XFlush(dpy);
 #else
-        puts(buf.data());
+        fmt::print("{}\n", buf.data());
 #endif
 }
 
@@ -436,7 +442,7 @@ handle_received(const std::uint32_t id)
 {
         if(id >= rt_responses.size())
         {
-                fprintf(stderr, "Received id out of bounds: %u\n", id);
+                fmt::print(stderr, "Received id out of bounds: {}\n", id);
                 return;
         }
 
@@ -444,12 +450,16 @@ handle_received(const std::uint32_t id)
         set_root();
 }
 
-int
-main()
+void
+cleanup_and_exit(const int)
 {
-        setup();
-        init_statusbar();
+        unlink(SOCKET_NAME.data());
+        exit(EXIT_SUCCESS);
+}
 
+void
+run()
+{
         const int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
         if(sockfd < 0)
         {
@@ -474,6 +484,9 @@ main()
                 cexit("listen");
         }
 
+        setup();
+        init_statusbar();
+
         while(running)
         {
                 const int datafd = accept(sockfd, nullptr, nullptr);
@@ -491,9 +504,9 @@ main()
                 }
                 if(ret != sizeof(id))
                 {
-                        fprintf(
+                        fmt::print(
                             stderr,
-                            "Received %u out of %lu bytes wanted for index\n",
+                            "Received {} out of {} bytes wanted for index\n",
                             ret,
                             sizeof(id)
                         );
@@ -505,4 +518,10 @@ main()
 
         close(sockfd);
         unlink(SOCKET_NAME.data());
+}
+
+int
+main()
+{
+        run();
 }

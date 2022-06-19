@@ -1,4 +1,4 @@
-#include <cstdio>
+#include <fmt/core.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -12,7 +12,7 @@ int main(const int argc, const char* argv[])
 {
         if(argc != 2)
         {
-                fprintf(stderr, "Usage: dwmstatus-client <id-of-update-command>");
+                fmt::print(stderr, "Usage: dwmstatus-client <id-of-update-command>");
                 exit(EXIT_FAILURE);
         }
 
@@ -43,7 +43,7 @@ int main(const int argc, const char* argv[])
         }
         catch(std::invalid_argument&)
         {
-                fprintf(stderr, "Failed to convert '%s' to std::uint32_t\n", argv[1]);
+                fmt::print(stderr, "Failed to convert '{}' to std::uint32_t\n", argv[1]);
                 exit(EXIT_FAILURE);
         }
 
