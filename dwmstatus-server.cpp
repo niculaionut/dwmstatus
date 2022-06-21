@@ -428,7 +428,7 @@ update_status()
             {
                     return fmt::format_to_n(
                                buffer,
-                               BUFFER_MAX_SIZE,
+                               ROOT_BUFFER_MAX_SIZE,
                                std::string_view(status_fmt.data(), status_fmt.size()),
                                std::string_view(args.data, args.length)...
                            );
