@@ -33,7 +33,7 @@ static constexpr int BUFFER_MAX_SIZE = 255;
 static constexpr int ROOT_BUFFER_MAX_SIZE = R_SIZE * BUFFER_MAX_SIZE;
 static constexpr int MAX_REQUESTS = 10;
 static constexpr std::string_view SOCKET_NAME = "/tmp/dwmstatus.socket";
-static constexpr auto fmt_format_str = []()
+static constexpr auto status_fmt = []()
 {
         std::string str = "[{}";
 
@@ -50,47 +50,13 @@ static constexpr auto fmt_format_str = []()
         return fmt_str;
 }();        
 
-/* using declarations */
-using CharBuffer     = std::array<char, BUFFER_MAX_SIZE + 1>;
-using RootCharBuffer = std::array<char, ROOT_BUFFER_MAX_SIZE + 1>;
-
-/* global variables */
-static std::array<CharBuffer, R_SIZE> buffers = {};
-static bool running = true;
-#ifndef NO_X11
-static Display* dpy = nullptr;
-static int screen;
-static Window root;
-#endif
-
-/* struct declarations */
-struct Response;
-
-/* template function declarations */
-template<const auto& resp_table, std::size_t... indexes>
-static void run_meta_response();
-
-/* constexpr function declarations */
-static constexpr Response make_shell_response(const char* command, char* buffer);
-static constexpr Response make_builtin_response(void (*fptr)(char*), char* buffer);
-static constexpr Response make_meta_response(void (*fptr)());
-
-/* function declarations */
-static void perror_exit(const char* why) DWMSTATUS_NORETURN;
-static int  exec_cmd(const char* cmd, char* output_buf);
-static void do_response(const Response* response);
-static void toggle_lang(char* output_buf);
-static void toggle_cpu_gov(char* output_buf);
-static void toggle_mic(char* output_buf);
-static void terminator();
-static void setup();
-static void init_statusbar();
-static void update_status();
-static void handle_received(const std::uint32_t id);
-static void cleanup_and_exit(const int) DWMSTATUS_NORETURN;
-static void run();
-
 /* struct definitions */
+struct FieldBuffer
+{
+        std::uint32_t length = 0;
+        char data[BUFFER_MAX_SIZE + 1] = {};
+};
+
 struct Response
 {
         enum Type {
@@ -101,12 +67,12 @@ struct Response
 
         struct ShellArgs {
                 const char* command;
-                char* buffer;
+                FieldBuffer* field_buffer;
         };
 
         struct BuiltinArgs {
-                void (*fptr)(char*);
-                char* buffer;
+                void (*fptr)(FieldBuffer*);
+                FieldBuffer* field_buffer;
         };
 
         struct MetaArgs {
@@ -121,6 +87,39 @@ struct Response
         } args;
 };
 
+/* template function declarations */
+template<const auto& resp_table, std::size_t... indexes>
+static void run_meta_response();
+
+/* constexpr function declarations */
+static constexpr Response make_shell_response(const char* command, FieldBuffer* buffer);
+static constexpr Response make_builtin_response(void (*fptr)(FieldBuffer*), FieldBuffer* buffer);
+static constexpr Response make_meta_response(void (*fptr)());
+
+/* function declarations */
+static void perror_exit(const char* why) DWMSTATUS_NORETURN;
+static int  exec_cmd(const char* cmd, FieldBuffer* field_buffer);
+static void do_response(const Response* response);
+static void toggle_lang(FieldBuffer* field_buffer);
+static void toggle_cpu_gov(FieldBuffer* field_buffer);
+static void toggle_mic(FieldBuffer* field_buffer);
+static void terminator();
+static void setup();
+static void init_statusbar();
+static void update_status();
+static void handle_received(const std::uint32_t id);
+static void cleanup_and_exit(const int) DWMSTATUS_NORETURN;
+static void run();
+
+/* global variables */
+static std::array<FieldBuffer, R_SIZE> buffers = {};
+static bool running = true;
+#ifndef NO_X11
+static Display* dpy = nullptr;
+static int screen;
+static Window root;
+#endif
+
 /* template function definitions */
 template<const auto& resp_table, std::size_t... indexes>
 void
@@ -131,25 +130,25 @@ run_meta_response()
 
 /* constexpr function definitions */
 constexpr Response
-make_shell_response(const char* command, char* buffer)
+make_shell_response(const char* command, FieldBuffer* field_buffer)
 {
         Response r;
 
-        r.type               = Response::Type::Shell;
-        r.args.shell.command = command;
-        r.args.shell.buffer  = buffer;
+        r.type                     = Response::Type::Shell;
+        r.args.shell.command       = command;
+        r.args.shell.field_buffer  = field_buffer;
 
         return r;
 }
 
 constexpr Response
-make_builtin_response(void (*fptr)(char*), char* buffer)
+make_builtin_response(void (*fptr)(FieldBuffer*), FieldBuffer* field_buffer)
 {
         Response r;
 
         r.type                = Response::Type::Builtin;
         r.args.builtin.fptr   = fptr;
-        r.args.builtin.buffer = buffer;
+        r.args.builtin.field_buffer = field_buffer;
 
         return r;
 }
@@ -174,7 +173,7 @@ perror_exit(const char* why)
 }
 
 int
-exec_cmd(const char* cmd, char* output_buf)
+exec_cmd(const char* cmd, FieldBuffer* field_buffer)
 {
         FILE* pipe = popen(cmd, "r");
         if(pipe == nullptr)
@@ -182,16 +181,22 @@ exec_cmd(const char* cmd, char* output_buf)
                 perror_exit("popen");
         }
 
-        output_buf[0] = '\0';
-        if(fgets(output_buf, BUFFER_MAX_SIZE + 1, pipe) != nullptr)
+        char* buffer = field_buffer->data;
+        buffer[0] = '\0';
+        field_buffer->length = 0;
+
+        if(fgets(buffer, BUFFER_MAX_SIZE + 1, pipe) != nullptr)
         {
-                auto len = strlen(output_buf);
+                auto len = strlen(buffer);
 
                 /* check for trailing newline and delete it */
-                if(len > 0 && output_buf[len - 1] == '\n')
+                if(len > 0 && buffer[len - 1] == '\n')
                 {
-                        output_buf[len - 1] = '\0';
+                        buffer[len - 1] = '\0';
+                        --len;
                 }
+
+                field_buffer->length = len;
         }
 
         return pclose(pipe);
@@ -205,14 +210,14 @@ do_response(const Response* response)
         case Response::Type::Shell:
         {
                 auto& args = response->args.shell;
-                exec_cmd(args.command, args.buffer);
+                exec_cmd(args.command, args.field_buffer);
 
                 break;
         }
         case Response::Type::Builtin:
         {
                 auto& args = response->args.builtin;
-                args.fptr(args.buffer);
+                args.fptr(args.field_buffer);
 
                 break;
         }
@@ -231,7 +236,7 @@ do_response(const Response* response)
 }
 
 void
-toggle_lang(char* output_buf)
+toggle_lang(FieldBuffer* field_buffer)
 {
         static constexpr std::string_view ltable[2] = {
             {"US"},
@@ -247,11 +252,13 @@ toggle_lang(char* output_buf)
 
         idx = !idx;
         std::system(commands[idx]);
-        memcpy(output_buf, ltable[idx].data(), 2);
+
+        memcpy(field_buffer->data, ltable[idx].data(), 2);
+        field_buffer->length = 2;
 }
 
 void
-toggle_cpu_gov(char* output_buf)
+toggle_cpu_gov(FieldBuffer* field_buffer)
 {
         static constexpr std::string_view freq_table[2] = {
             {"*"},
@@ -267,11 +274,13 @@ toggle_cpu_gov(char* output_buf)
 
         idx = !idx;
         std::system(commands[idx]);
-        memcpy(output_buf, freq_table[idx].data(), 1);
+
+        memcpy(field_buffer->data, freq_table[idx].data(), 1);
+        field_buffer->length = 1;
 }
 
 void
-toggle_mic(char* output_buf)
+toggle_mic(FieldBuffer* field_buffer)
 {
         static constexpr std::string_view mic_status_table[2] = {
             {"0"},
@@ -284,7 +293,9 @@ toggle_mic(char* output_buf)
 
         idx = !idx;
         std::system(command);
-        memcpy(output_buf, mic_status_table[idx].data(), 1);
+
+        memcpy(field_buffer->data, mic_status_table[idx].data(), 1);
+        field_buffer->length = 1;
 }
 
 void
@@ -296,34 +307,34 @@ terminator()
 
 static constexpr auto sr_table = []()
 {
-        std::array arr = std::to_array<std::pair<const char*, char*>>({
+        std::array arr = std::to_array<std::pair<const char*, FieldBuffer*>>({
             {   /* time */
                 R"(date +%H:%M:%S)",        /* shell command */
-                buffers[R_TIME].data()      /* reference to root buffer */
+                &buffers[R_TIME]            /* reference to root buffer */
             },
             {   /* sys load*/
                 R"(uptime | grep -wo "average: .*," | cut --delimiter=' ' -f2 | head -c4)",
-                buffers[R_LOAD].data()
+                &buffers[R_LOAD]
             },
             {   /* cpu temp*/
                 R"(sensors | grep -F "Core 0" | awk '{print $3}' | cut -c2-5)",
-                buffers[R_TEMP].data()
+                &buffers[R_TEMP]
             },
             {   /* volume */
                 R"(amixer sget Master | tail -n1 | get-from-to '[' ']' '--amixer')",
-                buffers[R_VOL].data()
+                &buffers[R_VOL]
             },
             {   /* memory usage */
                 R"(xss-get-mem)",
-                buffers[R_MEM].data()
+                &buffers[R_MEM]
             },
             {   /* date */
                 R"(date "+%d.%m.%Y")",
-                buffers[R_DATE].data()
+                &buffers[R_DATE]
             },
             {   /* weather */
                 R"(curl wttr.in/Bucharest?format=1 2>/dev/null | get-from '+')",
-                buffers[R_WTH].data()
+                &buffers[R_WTH]
             }
         });
 
@@ -338,11 +349,11 @@ static constexpr auto sr_table = []()
 
 static constexpr auto br_table = []()
 {
-        std::array arr = std::to_array<std::pair<void(*)(char*), char*>>({
+        std::array arr = std::to_array<std::pair<void(*)(FieldBuffer*), FieldBuffer*>>({
            /* pointer to function   reference to root buffer */
-            { &toggle_lang,         buffers[R_LANG].data() },
-            { &toggle_cpu_gov,      buffers[R_GOV].data()  },
-            { &toggle_mic,          buffers[R_MIC].data()  }
+            { &toggle_lang,         &buffers[R_LANG] },
+            { &toggle_cpu_gov,      &buffers[R_GOV]  },
+            { &toggle_mic,          &buffers[R_MIC]  }
         });
 
         std::array<Response, arr.size()> responses;
@@ -410,28 +421,28 @@ init_statusbar()
 void
 update_status()
 {
-        RootCharBuffer buf;
+        char buffer[ROOT_BUFFER_MAX_SIZE + 1];
 
-        const auto format_res = std::apply(
+        const auto res = std::apply(
             [&](auto&&... args)
             {
                     return fmt::format_to_n(
-                               buf.data(),
+                               buffer,
                                BUFFER_MAX_SIZE,
-                               std::string_view(fmt_format_str.data()),
-                               std::string_view(args.data())...
+                               std::string_view(status_fmt.data(), status_fmt.size()),
+                               std::string_view(args.data, args.length)...
                            );
             },
             buffers
         );
 
-        *format_res.out = '\0';
+        *res.out = '\0';
 
 #ifndef NO_X11
-        XStoreName(dpy, root, buf.data());
+        XStoreName(dpy, root, buffer);
         XFlush(dpy);
 #else
-        fmt::print("{}\n", buf.data());
+        fmt::print("{}\n", buffer);
 #endif
 }
 
