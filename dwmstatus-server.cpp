@@ -402,16 +402,8 @@ setup()
 void
 init_statusbar()
 {
-        for(const auto& r : sr_table)
-        {
-                do_response(&r);
-        }
-
-        for(const auto& r : br_table)
-        {
-                do_response(&r);
-        }
-
+        for(const auto& r : sr_table) { do_response(&r); }
+        for(const auto& r : br_table) { do_response(&r); }
         update_status();
 }
 
