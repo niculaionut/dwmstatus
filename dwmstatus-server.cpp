@@ -430,7 +430,9 @@ update_status()
                                std::string_view(args.data())...
                            );
             },
-            buffers);
+            buffers
+        );
+
         *format_res.out = '\0';
 
 #ifndef NO_X11
