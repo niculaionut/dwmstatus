@@ -134,9 +134,9 @@ make_shell_response(const char* command, FieldBuffer* field_buffer)
 {
         Response r;
 
-        r.type                     = Response::Type::Shell;
-        r.args.shell.command       = command;
-        r.args.shell.field_buffer  = field_buffer;
+        r.type                    = Response::Type::Shell;
+        r.args.shell.command      = command;
+        r.args.shell.field_buffer = field_buffer;
 
         return r;
 }
@@ -146,8 +146,8 @@ make_builtin_response(void (*fptr)(FieldBuffer*), FieldBuffer* field_buffer)
 {
         Response r;
 
-        r.type                = Response::Type::Builtin;
-        r.args.builtin.fptr   = fptr;
+        r.type                      = Response::Type::Builtin;
+        r.args.builtin.fptr         = fptr;
         r.args.builtin.field_buffer = field_buffer;
 
         return r;
