@@ -65,9 +65,9 @@ struct FieldUpdate
 
         int type;
         union {
-                ShellArgs shell;
+                ShellArgs   shell;
                 BuiltinArgs builtin;
-                MetaArgs meta;
+                MetaArgs    meta;
         } args;
 };
 
