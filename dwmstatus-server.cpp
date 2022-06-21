@@ -11,21 +11,22 @@
 #endif
 
 /* macros */
-#define DWMSTATUS_NORETURN __attribute__((__noreturn__))
+#define DWMSTATUS_NORETURN    __attribute__((__noreturn__))
+#define DWMSTATUS_UNREACHABLE __builtin_unreachable()
 
 /* enums */
 enum {
-    R_TIME = 0,
-    R_LOAD,
-    R_TEMP,
-    R_VOL,
-    R_MIC,
-    R_MEM,
-    R_GOV,
-    R_LANG,
-    R_WTH,
-    R_DATE,
-    R_SIZE
+        R_TIME = 0,
+        R_LOAD,
+        R_TEMP,
+        R_VOL,
+        R_MIC,
+        R_MEM,
+        R_GOV,
+        R_LANG,
+        R_WTH,
+        R_DATE,
+        R_SIZE
 };
 
 /* global constexpr variables */
@@ -319,7 +320,7 @@ run_update(const FieldUpdate* field_update)
         }
         default:
         {
-                __builtin_unreachable();
+                DWMSTATUS_UNREACHABLE;
         }
         }
 }
