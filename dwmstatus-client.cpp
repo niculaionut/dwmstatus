@@ -1,6 +1,5 @@
 #include <fmt/core.h>
 #include <stdexcept>
-#include <string>
 #include <string_view>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -16,8 +15,8 @@ int main(const int argc, const char* argv[])
                 exit(EXIT_FAILURE);
         }
 
-        const int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if(sockfd < 0)
+        const int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if(server_fd < 0)
         {
                 perror("socket");
                 exit(EXIT_FAILURE);
@@ -29,7 +28,7 @@ int main(const int argc, const char* argv[])
         addr.sun_family = AF_UNIX;
         strncpy(addr.sun_path, SOCKET_NAME.data(), sizeof(addr.sun_path) - 1);
 
-        int ret = connect(sockfd, (const struct sockaddr*)&addr, sizeof(addr));
+        int ret = connect(server_fd, (const struct sockaddr*)&addr, sizeof(addr));
         if(ret < 0)
         {
                 perror("connect");
@@ -47,12 +46,12 @@ int main(const int argc, const char* argv[])
                 exit(EXIT_FAILURE);
         }
 
-        ret = write(sockfd, &num, sizeof(num));
+        ret = write(server_fd, &num, sizeof(num));
         if(ret < 0)
         {
                 perror("write");
                 exit(EXIT_FAILURE);
         }
 
-        close(sockfd);
+        close(server_fd);
 }

@@ -1,5 +1,4 @@
 #include <array>
-#include <vector>
 #include <tuple>
 #include <numeric>
 #include <fmt/core.h>
@@ -372,7 +371,7 @@ static constexpr auto mr_table = []()
         return responses;
 }();
 
-static const std::vector<const Response*> rt_responses = {
+static constexpr auto rt_table = std::to_array<const Response*>({
         &mr_table[1], // 0
         &sr_table[3], // 1
         &sr_table[6], // 2
@@ -380,7 +379,7 @@ static const std::vector<const Response*> rt_responses = {
         &br_table[1], // 4
         &br_table[2], // 5
         &mr_table[0]  // 6
-};
+});
 
 void
 setup()
@@ -443,19 +442,19 @@ set_root()
 void
 handle_received(const std::uint32_t id)
 {
-        if(id >= rt_responses.size())
+        if(id >= rt_table.size())
         {
                 fmt::print(
                     stderr,
                     "handle_received(): Received id out of bounds: {}. Size is: {}.\n",
                     id,
-                    rt_responses.size()
+                    rt_table.size()
                 );
 
                 return;
         }
 
-        do_response(rt_responses[id]);
+        do_response(rt_table[id]);
         set_root();
 }
 
@@ -469,8 +468,8 @@ cleanup_and_exit(const int)
 void
 run()
 {
-        const int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if(sockfd < 0)
+        const int sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if(sock_fd < 0)
         {
                 cexit("socket");
         }
@@ -481,13 +480,13 @@ run()
         name.sun_family = AF_UNIX;
         strncpy(name.sun_path, SOCKET_NAME.data(), sizeof(name.sun_path) - 1);
 
-        int ret = bind(sockfd, (const struct sockaddr*)&name, sizeof(name));
+        int ret = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
         if(ret < 0)
         {
                 cexit("bind");
         }
 
-        ret = listen(sockfd, MAX_REQUESTS);
+        ret = listen(sock_fd, MAX_REQUESTS);
         if(ret < 0)
         {
                 cexit("listen");
@@ -498,15 +497,15 @@ run()
 
         while(running)
         {
-                const int datafd = accept(sockfd, nullptr, nullptr);
-                if(datafd < 0)
+                const int client_fd = accept(sock_fd, nullptr, nullptr);
+                if(client_fd < 0)
                 {
                         cexit("accept");
                 }
 
                 std::uint32_t id;
 
-                ret = read(datafd, &id, sizeof(id));
+                ret = read(client_fd, &id, sizeof(id));
                 if(ret < 0)
                 {
                         cexit("read");
@@ -526,10 +525,10 @@ run()
                         handle_received(id);
                 }
 
-                close(datafd);
+                close(client_fd);
         }
 
-        close(sockfd);
+        close(sock_fd);
         unlink(SOCKET_NAME.data());
 }
 
