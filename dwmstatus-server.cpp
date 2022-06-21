@@ -477,7 +477,7 @@ cleanup_and_exit(const int)
 void
 run()
 {
-        const int sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        const int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
         if(sock_fd < 0)
         {
                 perror_exit("socket");
@@ -495,27 +495,16 @@ run()
                 perror_exit("bind");
         }
 
-        ret = listen(sock_fd, MAX_REQUESTS);
-        if(ret < 0)
-        {
-                perror_exit("listen");
-        }
-
         setup();
         init_statusbar();
 
         while(running)
         {
-                const int client_fd = accept(sock_fd, nullptr, nullptr);
-                if(client_fd < 0)
-                {
-                        perror_exit("accept");
-                }
-
                 std::uint32_t id;
-                ret = read(client_fd, &id, sizeof(id));
+                ret = read(sock_fd, &id, sizeof(id));
                 if(ret < 0)
                 {
+                        unlink(SOCKET_PATH.data());
                         perror_exit("read");
                 }
 
@@ -532,8 +521,6 @@ run()
                 {
                         handle_received(id);
                 }
-
-                close(client_fd);
         }
 
         close(sock_fd);
