@@ -32,23 +32,7 @@ enum {
 static constexpr int BUFFER_MAX_SIZE = 255;
 static constexpr int ROOT_BUFFER_MAX_SIZE = R_SIZE * BUFFER_MAX_SIZE;
 static constexpr std::string_view SOCKET_PATH = "/tmp/dwmstatus.socket";
-static constexpr auto STATUS_FMT = []()
-{
-        std::string str = "[{}";
-
-        for(int i = 0; i < R_SIZE - 1; ++i)
-        {
-                str += " |{}";
-        }
-
-        str += "]";
-
-        std::array<char, R_SIZE * 15> fmt_str = {};
-        std::char_traits<char>::copy(fmt_str.data(), str.c_str(), str.size());
-
-        return fmt_str;
-}();
-static constexpr int STATUS_FMT_LEN = std::char_traits<char>::length(STATUS_FMT.data());
+static constexpr std::string_view STATUS_FMT = "[{} |{} |{} |{} |{} |{} |{} |{} |{} |{}]";
 
 /* struct definitions */
 struct FieldBuffer
@@ -430,7 +414,7 @@ update_screen()
                     return fmt::format_to_n(
                                buffer,
                                ROOT_BUFFER_MAX_SIZE,
-                               std::string_view(STATUS_FMT.data(), STATUS_FMT_LEN),
+                               STATUS_FMT,
                                std::string_view(args.data, args.length)...
                            );
             },
