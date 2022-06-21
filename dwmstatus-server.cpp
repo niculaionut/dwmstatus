@@ -76,7 +76,7 @@ static constexpr Response make_builtin_response(void (*fptr)(char*), char* buffe
 static constexpr Response make_meta_response(void (*fptr)());
 
 /* function declarations */
-static void cexit(const char* why) DWMSTATUS_NORETURN;
+static void perror_exit(const char* why) DWMSTATUS_NORETURN;
 static int  exec_cmd(const char* cmd, char* output_buf);
 static void do_response(const Response* response);
 static void toggle_lang(char* output_buf);
@@ -85,7 +85,7 @@ static void toggle_mic(char* output_buf);
 static void terminator();
 static void setup();
 static void init_statusbar();
-static void set_root();
+static void update_status();
 static void handle_received(const std::uint32_t id);
 static void cleanup_and_exit(const int) DWMSTATUS_NORETURN;
 static void run();
@@ -167,7 +167,7 @@ make_meta_response(void (*fptr)())
 
 /* function definitions */
 void DWMSTATUS_NORETURN
-cexit(const char* why)
+perror_exit(const char* why)
 {
         perror(why);
         exit(EXIT_FAILURE);
@@ -179,7 +179,7 @@ exec_cmd(const char* cmd, char* output_buf)
         FILE* pipe = popen(cmd, "r");
         if(pipe == nullptr)
         {
-                cexit("popen");
+                perror_exit("popen");
         }
 
         output_buf[0] = '\0';
@@ -412,21 +412,23 @@ init_statusbar()
                 do_response(&r);
         }
 
-        set_root();
+        update_status();
 }
 
 void
-set_root()
+update_status()
 {
         RootCharBuffer buf;
 
         const auto format_res = std::apply(
             [&](auto&&... args)
             {
-                    return fmt::format_to_n(buf.data(),
-                                            BUFFER_MAX_SIZE,
-                                            std::string_view(fmt_format_str.data()),
-                                            std::string_view(args.data())...);
+                    return fmt::format_to_n(
+                               buf.data(),
+                               BUFFER_MAX_SIZE,
+                               std::string_view(fmt_format_str.data()),
+                               std::string_view(args.data())...
+                           );
             },
             buffers);
         *format_res.out = '\0';
@@ -455,7 +457,7 @@ handle_received(const std::uint32_t id)
         }
 
         do_response(rt_table[id]);
-        set_root();
+        update_status();
 }
 
 void DWMSTATUS_NORETURN
@@ -471,7 +473,7 @@ run()
         const int sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if(sock_fd < 0)
         {
-                cexit("socket");
+                perror_exit("socket");
         }
 
         struct sockaddr_un name;
@@ -483,13 +485,13 @@ run()
         int ret = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
         if(ret < 0)
         {
-                cexit("bind");
+                perror_exit("bind");
         }
 
         ret = listen(sock_fd, MAX_REQUESTS);
         if(ret < 0)
         {
-                cexit("listen");
+                perror_exit("listen");
         }
 
         setup();
@@ -500,7 +502,7 @@ run()
                 const int client_fd = accept(sock_fd, nullptr, nullptr);
                 if(client_fd < 0)
                 {
-                        cexit("accept");
+                        perror_exit("accept");
                 }
 
                 std::uint32_t id;
@@ -508,7 +510,7 @@ run()
                 ret = read(client_fd, &id, sizeof(id));
                 if(ret < 0)
                 {
-                        cexit("read");
+                        perror_exit("read");
                 }
 
                 if(ret != sizeof(id))
