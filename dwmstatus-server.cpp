@@ -31,7 +31,6 @@ enum {
 /* global constexpr variables */
 static constexpr int BUFFER_MAX_SIZE = 255;
 static constexpr int ROOT_BUFFER_MAX_SIZE = R_SIZE * BUFFER_MAX_SIZE;
-static constexpr int MAX_REQUESTS = 10;
 static constexpr std::string_view SOCKET_PATH = "/tmp/dwmstatus.socket";
 static constexpr auto STATUS_FMT = []()
 {
