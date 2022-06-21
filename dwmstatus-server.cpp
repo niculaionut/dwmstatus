@@ -112,7 +112,7 @@ static void cleanup_and_exit(const int) DWMSTATUS_NORETURN;
 static void run();
 
 /* global variables */
-static std::array<FieldBuffer, R_SIZE> buffers = {};
+static std::array<FieldBuffer, R_SIZE> field_buffers = {};
 static bool running = true;
 #ifndef NO_X11
 static Display* dpy = nullptr;
@@ -310,31 +310,31 @@ static constexpr auto sr_table = []()
         std::array arr = std::to_array<std::pair<const char*, FieldBuffer*>>({
             {   /* time */
                 R"(date +%H:%M:%S)",        /* shell command */
-                &buffers[R_TIME]            /* reference to root buffer */
+                &field_buffers[R_TIME]      /* reference to root buffer */
             },
             {   /* sys load*/
                 R"(uptime | grep -wo "average: .*," | cut --delimiter=' ' -f2 | head -c4)",
-                &buffers[R_LOAD]
+                &field_buffers[R_LOAD]
             },
             {   /* cpu temp*/
                 R"(sensors | grep -F "Core 0" | awk '{print $3}' | cut -c2-5)",
-                &buffers[R_TEMP]
+                &field_buffers[R_TEMP]
             },
             {   /* volume */
                 R"(amixer sget Master | tail -n1 | get-from-to '[' ']' '--amixer')",
-                &buffers[R_VOL]
+                &field_buffers[R_VOL]
             },
             {   /* memory usage */
                 R"(xss-get-mem)",
-                &buffers[R_MEM]
+                &field_buffers[R_MEM]
             },
             {   /* date */
                 R"(date "+%d.%m.%Y")",
-                &buffers[R_DATE]
+                &field_buffers[R_DATE]
             },
             {   /* weather */
                 R"(curl wttr.in/Bucharest?format=1 2>/dev/null | get-from '+')",
-                &buffers[R_WTH]
+                &field_buffers[R_WTH]
             }
         });
 
@@ -351,9 +351,9 @@ static constexpr auto br_table = []()
 {
         std::array arr = std::to_array<std::pair<void(*)(FieldBuffer*), FieldBuffer*>>({
            /* pointer to function   reference to root buffer */
-            { &toggle_lang,         &buffers[R_LANG] },
-            { &toggle_cpu_gov,      &buffers[R_GOV]  },
-            { &toggle_mic,          &buffers[R_MIC]  }
+            { &toggle_lang,         &field_buffers[R_LANG] },
+            { &toggle_cpu_gov,      &field_buffers[R_GOV]  },
+            { &toggle_mic,          &field_buffers[R_MIC]  }
         });
 
         std::array<Response, arr.size()> responses;
@@ -433,7 +433,7 @@ update_status()
                                std::string_view(args.data, args.length)...
                            );
             },
-            buffers
+            field_buffers
         );
 
         *res.out = '\0';
