@@ -14,18 +14,18 @@
 #define DWMSTATUS_NORETURN __attribute__((__noreturn__))
 
 /* enums */
-enum FieldIndexes {
-        R_TIME = 0,
-        R_LOAD,
-        R_TEMP,
-        R_VOL,
-        R_MIC,
-        R_MEM,
-        R_GOV,
-        R_LANG,
-        R_WTH,
-        R_DATE,
-        R_SIZE
+enum {
+    R_TIME = 0,
+    R_LOAD,
+    R_TEMP,
+    R_VOL,
+    R_MIC,
+    R_MEM,
+    R_GOV,
+    R_LANG,
+    R_WTH,
+    R_DATE,
+    R_SIZE
 };
 
 /* global constexpr variables */
@@ -33,7 +33,7 @@ static constexpr int BUFFER_MAX_SIZE = 255;
 static constexpr int ROOT_BUFFER_MAX_SIZE = R_SIZE * BUFFER_MAX_SIZE;
 static constexpr int MAX_REQUESTS = 10;
 static constexpr std::string_view SOCKET_NAME = "/tmp/dwmstatus.socket";
-static constexpr auto status_fmt = []()
+static constexpr auto STATUS_FMT = []()
 {
         std::string str = "[{}";
 
@@ -49,7 +49,7 @@ static constexpr auto status_fmt = []()
 
         return fmt_str;
 }();
-static constexpr int status_fmt_len = std::char_traits<char>::length(status_fmt.data());
+static constexpr int STATUS_FMT_LEN = std::char_traits<char>::length(STATUS_FMT.data());
 
 /* struct definitions */
 struct FieldBuffer
@@ -431,7 +431,7 @@ update_screen()
                     return fmt::format_to_n(
                                buffer,
                                ROOT_BUFFER_MAX_SIZE,
-                               std::string_view(status_fmt.data(), status_fmt_len),
+                               std::string_view(STATUS_FMT.data(), STATUS_FMT_LEN),
                                std::string_view(args.data, args.length)...
                            );
             },
