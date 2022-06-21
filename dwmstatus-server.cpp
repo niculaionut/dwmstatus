@@ -48,7 +48,8 @@ static constexpr auto status_fmt = []()
         std::char_traits<char>::copy(fmt_str.data(), str.c_str(), str.size());
 
         return fmt_str;
-}();        
+}();
+static constexpr int status_fmt_len = std::char_traits<char>::length(status_fmt.data());
 
 /* struct definitions */
 struct FieldBuffer
@@ -429,7 +430,7 @@ update_status()
                     return fmt::format_to_n(
                                buffer,
                                ROOT_BUFFER_MAX_SIZE,
-                               std::string_view(status_fmt.data(), status_fmt.size()),
+                               std::string_view(status_fmt.data(), status_fmt_len),
                                std::string_view(args.data, args.length)...
                            );
             },
