@@ -11,6 +11,9 @@
 #include <X11/Xlib.h>
 #endif
 
+/* macros */
+#define DWMSTATUS_NORETURN __attribute__((__noreturn__))
+
 /* enums */
 enum FieldIndexes {
         R_TIME = 0,
@@ -74,8 +77,8 @@ static constexpr Response make_builtin_response(void (*fptr)(char*), char* buffe
 static constexpr Response make_meta_response(void (*fptr)());
 
 /* function declarations */
-static void cexit(const char* why);
-static int exec_cmd(const char* cmd, char* output_buf);
+static void cexit(const char* why) DWMSTATUS_NORETURN;
+static int  exec_cmd(const char* cmd, char* output_buf);
 static void do_response(const Response* response);
 static void toggle_lang(char* output_buf);
 static void toggle_cpu_gov(char* output_buf);
@@ -85,14 +88,14 @@ static void setup();
 static void init_statusbar();
 static void set_root();
 static void handle_received(const std::uint32_t id);
-static void cleanup_and_exit(const int);
+static void cleanup_and_exit(const int) DWMSTATUS_NORETURN;
 static void run();
 
 /* struct definitions */
 struct Response
 {
         enum Type {
-                Shell,
+                Shell = 0,
                 Builtin,
                 Meta
         };
@@ -164,7 +167,7 @@ make_meta_response(void (*fptr)())
 }
 
 /* function definitions */
-void
+void DWMSTATUS_NORETURN
 cexit(const char* why)
 {
         perror(why);
@@ -456,7 +459,7 @@ handle_received(const std::uint32_t id)
         set_root();
 }
 
-void
+void DWMSTATUS_NORETURN
 cleanup_and_exit(const int)
 {
         unlink(SOCKET_NAME.data());
