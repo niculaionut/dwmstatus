@@ -58,7 +58,7 @@ struct FieldBuffer
         char data[BUFFER_MAX_SIZE + 1] = {};
 };
 
-struct Response
+struct FieldUpdate
 {
         enum Type {
                 Shell = 0,
@@ -88,26 +88,26 @@ struct Response
         } args;
 };
 
-/* template function declarations */
-template<const auto& resp_table, std::size_t... indexes>
-static void run_meta_response();
-
 /* constexpr function declarations */
-static constexpr Response make_shell_response(const char* command, FieldBuffer* buffer);
-static constexpr Response make_builtin_response(void (*fptr)(FieldBuffer*), FieldBuffer* buffer);
-static constexpr Response make_meta_response(void (*fptr)());
+static constexpr FieldUpdate make_shell_update(const char* command, FieldBuffer* buffer);
+static constexpr FieldUpdate make_builtin_update(void (*fptr)(FieldBuffer*), FieldBuffer* buffer);
+static constexpr FieldUpdate make_meta_update(void (*fptr)());
+
+/* template function declarations */
+template<const auto& updates, std::size_t... indexes>
+static void run_meta_update();
 
 /* function declarations */
 static void perror_exit(const char* why) DWMSTATUS_NORETURN;
-static int  exec_cmd(const char* cmd, FieldBuffer* field_buffer);
-static void do_response(const Response* response);
+static int  write_cmd_output(const char* cmd, FieldBuffer* field_buffer);
+static void run_update(const FieldUpdate* field_update);
 static void toggle_lang(FieldBuffer* field_buffer);
 static void toggle_cpu_gov(FieldBuffer* field_buffer);
 static void toggle_mic(FieldBuffer* field_buffer);
 static void terminator();
 static void setup();
 static void init_statusbar();
-static void update_status();
+static void update_screen();
 static void handle_received(const std::uint32_t id);
 static void cleanup_and_exit(const int) DWMSTATUS_NORETURN;
 static void run();
@@ -121,48 +121,136 @@ static int screen;
 static Window root;
 #endif
 
-/* template function definitions */
-template<const auto& resp_table, std::size_t... indexes>
-void
-run_meta_response()
-{
-        (do_response(&resp_table[indexes]), ...);
-}
-
 /* constexpr function definitions */
-constexpr Response
-make_shell_response(const char* command, FieldBuffer* field_buffer)
+constexpr FieldUpdate
+make_shell_update(const char* command, FieldBuffer* field_buffer)
 {
-        Response r;
+        FieldUpdate f;
 
-        r.type                    = Response::Type::Shell;
-        r.args.shell.command      = command;
-        r.args.shell.field_buffer = field_buffer;
+        f.type                    = FieldUpdate::Type::Shell;
+        f.args.shell.command      = command;
+        f.args.shell.field_buffer = field_buffer;
 
-        return r;
+        return f;
 }
 
-constexpr Response
-make_builtin_response(void (*fptr)(FieldBuffer*), FieldBuffer* field_buffer)
+constexpr FieldUpdate
+make_builtin_update(void (*fptr)(FieldBuffer*), FieldBuffer* field_buffer)
 {
-        Response r;
+        FieldUpdate f;
 
-        r.type                      = Response::Type::Builtin;
-        r.args.builtin.fptr         = fptr;
-        r.args.builtin.field_buffer = field_buffer;
+        f.type                      = FieldUpdate::Type::Builtin;
+        f.args.builtin.fptr         = fptr;
+        f.args.builtin.field_buffer = field_buffer;
 
-        return r;
+        return f;
 }
 
-constexpr Response
-make_meta_response(void (*fptr)())
+constexpr FieldUpdate
+make_meta_update(void (*fptr)())
 {
-        Response r;
+        FieldUpdate f;
 
-        r.type           = Response::Type::Meta;
-        r.args.meta.fptr = fptr;
+        f.type           = FieldUpdate::Type::Meta;
+        f.args.meta.fptr = fptr;
 
-        return r;
+        return f;
+}
+
+/* field configs */
+static constexpr auto shell_updates = []()
+{
+        std::array arr = std::to_array<std::pair<const char*, FieldBuffer*>>({
+            {   /* time */
+                R"(date +%H:%M:%S)",        /* shell command */
+                &field_buffers[R_TIME]      /* reference to root buffer */
+            },
+            {   /* sys load*/
+                R"(uptime | grep -wo "average: .*," | cut --delimiter=' ' -f2 | head -c4)",
+                &field_buffers[R_LOAD]
+            },
+            {   /* cpu temp*/
+                R"(sensors | grep -F "Core 0" | awk '{print $3}' | cut -c2-5)",
+                &field_buffers[R_TEMP]
+            },
+            {   /* volume */
+                R"(amixer sget Master | tail -n1 | get-from-to '[' ']' '--amixer')",
+                &field_buffers[R_VOL]
+            },
+            {   /* memory usage */
+                R"(xss-get-mem)",
+                &field_buffers[R_MEM]
+            },
+            {   /* date */
+                R"(date "+%d.%m.%Y")",
+                &field_buffers[R_DATE]
+            },
+            {   /* weather */
+                R"(curl wttr.in/Bucharest?format=1 2>/dev/null | get-from '+')",
+                &field_buffers[R_WTH]
+            }
+        });
+
+        std::array<FieldUpdate, arr.size()> field_updates;
+        for(std::size_t i = 0; i < field_updates.size(); ++i)
+        {
+                field_updates[i] = make_shell_update(arr[i].first, arr[i].second);
+        }
+
+        return field_updates;
+}();
+
+static constexpr auto builtin_updates = []()
+{
+        std::array arr = std::to_array<std::pair<void(*)(FieldBuffer*), FieldBuffer*>>({
+           /* pointer to function   reference to root buffer */
+            { &toggle_lang,         &field_buffers[R_LANG] },
+            { &toggle_cpu_gov,      &field_buffers[R_GOV]  },
+            { &toggle_mic,          &field_buffers[R_MIC]  }
+        });
+
+        std::array<FieldUpdate, arr.size()> field_updates;
+        for(std::size_t i = 0; i < field_updates.size(); ++i)
+        {
+                field_updates[i] = make_builtin_update(arr[i].first, arr[i].second);
+        }
+
+        return field_updates;
+}();
+
+static constexpr auto meta_updates = []()
+{
+        std::array arr = std::to_array<void (*)()>({
+           /* pointer to function */
+            &run_meta_update<shell_updates, 0, 1, 2, 4>,
+            &terminator
+        });
+
+        std::array<FieldUpdate, arr.size()> field_updates;
+        for(std::size_t i = 0; i < field_updates.size(); ++i)
+        {
+                field_updates[i] = make_meta_update(arr[i]);
+        }
+
+        return field_updates;
+}();
+
+static constexpr auto real_time_updates = std::to_array<const FieldUpdate*>({
+        &meta_updates[1],    /* 0 */
+        &shell_updates[3],   /* 1 */
+        &shell_updates[6],   /* 2 */
+        &builtin_updates[0], /* 3 */
+        &builtin_updates[1], /* 4 */
+        &builtin_updates[2], /* 5 */
+        &meta_updates[0]     /* 6 */
+});
+
+/* template function definitions */
+template<const auto& updates, std::size_t... indexes>
+void
+run_meta_update()
+{
+        (run_update(&updates[indexes]), ...);
 }
 
 /* function definitions */
@@ -174,7 +262,7 @@ perror_exit(const char* why)
 }
 
 int
-exec_cmd(const char* cmd, FieldBuffer* field_buffer)
+write_cmd_output(const char* cmd, FieldBuffer* field_buffer)
 {
         FILE* pipe = popen(cmd, "r");
         if(pipe == nullptr)
@@ -204,27 +292,27 @@ exec_cmd(const char* cmd, FieldBuffer* field_buffer)
 }
 
 void
-do_response(const Response* response)
+run_update(const FieldUpdate* field_update)
 {
-        switch(response->type)
+        switch(field_update->type)
         {
-        case Response::Type::Shell:
+        case FieldUpdate::Type::Shell:
         {
-                auto& args = response->args.shell;
-                exec_cmd(args.command, args.field_buffer);
+                auto& args = field_update->args.shell;
+                write_cmd_output(args.command, args.field_buffer);
 
                 break;
         }
-        case Response::Type::Builtin:
+        case FieldUpdate::Type::Builtin:
         {
-                auto& args = response->args.builtin;
+                auto& args = field_update->args.builtin;
                 args.fptr(args.field_buffer);
 
                 break;
         }
-        case Response::Type::Meta:
+        case FieldUpdate::Type::Meta:
         {
-                auto& args = response->args.meta;
+                auto& args = field_update->args.meta;
                 args.fptr();
 
                 break;
@@ -306,93 +394,6 @@ terminator()
         running = false;
 }
 
-static constexpr auto sr_table = []()
-{
-        std::array arr = std::to_array<std::pair<const char*, FieldBuffer*>>({
-            {   /* time */
-                R"(date +%H:%M:%S)",        /* shell command */
-                &field_buffers[R_TIME]      /* reference to root buffer */
-            },
-            {   /* sys load*/
-                R"(uptime | grep -wo "average: .*," | cut --delimiter=' ' -f2 | head -c4)",
-                &field_buffers[R_LOAD]
-            },
-            {   /* cpu temp*/
-                R"(sensors | grep -F "Core 0" | awk '{print $3}' | cut -c2-5)",
-                &field_buffers[R_TEMP]
-            },
-            {   /* volume */
-                R"(amixer sget Master | tail -n1 | get-from-to '[' ']' '--amixer')",
-                &field_buffers[R_VOL]
-            },
-            {   /* memory usage */
-                R"(xss-get-mem)",
-                &field_buffers[R_MEM]
-            },
-            {   /* date */
-                R"(date "+%d.%m.%Y")",
-                &field_buffers[R_DATE]
-            },
-            {   /* weather */
-                R"(curl wttr.in/Bucharest?format=1 2>/dev/null | get-from '+')",
-                &field_buffers[R_WTH]
-            }
-        });
-
-        std::array<Response, arr.size()> responses;
-        for(std::size_t i = 0; i < responses.size(); ++i)
-        {
-                responses[i] = make_shell_response(arr[i].first, arr[i].second);
-        }
-
-        return responses;
-}();
-
-static constexpr auto br_table = []()
-{
-        std::array arr = std::to_array<std::pair<void(*)(FieldBuffer*), FieldBuffer*>>({
-           /* pointer to function   reference to root buffer */
-            { &toggle_lang,         &field_buffers[R_LANG] },
-            { &toggle_cpu_gov,      &field_buffers[R_GOV]  },
-            { &toggle_mic,          &field_buffers[R_MIC]  }
-        });
-
-        std::array<Response, arr.size()> responses;
-        for(std::size_t i = 0; i < responses.size(); ++i)
-        {
-                responses[i] = make_builtin_response(arr[i].first, arr[i].second);
-        }
-
-        return responses;
-}();
-
-static constexpr auto mr_table = []()
-{
-        std::array arr = std::to_array<void (*)()>({
-           /* pointer to function */
-            &run_meta_response<sr_table, 0, 1, 2, 4>,
-            &terminator
-        });
-
-        std::array<Response, arr.size()> responses;
-        for(std::size_t i = 0; i < responses.size(); ++i)
-        {
-                responses[i] = make_meta_response(arr[i]);
-        }
-
-        return responses;
-}();
-
-static constexpr auto rt_table = std::to_array<const Response*>({
-        &mr_table[1], // 0
-        &sr_table[3], // 1
-        &sr_table[6], // 2
-        &br_table[0], // 3
-        &br_table[1], // 4
-        &br_table[2], // 5
-        &mr_table[0]  // 6
-});
-
 void
 setup()
 {
@@ -414,13 +415,13 @@ setup()
 void
 init_statusbar()
 {
-        for(const auto& r : sr_table) { do_response(&r); }
-        for(const auto& r : br_table) { do_response(&r); }
-        update_status();
+        for(const auto& u : shell_updates)   { run_update(&u); }
+        for(const auto& u : builtin_updates) { run_update(&u); }
+        update_screen();
 }
 
 void
-update_status()
+update_screen()
 {
         char buffer[ROOT_BUFFER_MAX_SIZE + 1];
 
@@ -450,20 +451,20 @@ update_status()
 void
 handle_received(const std::uint32_t id)
 {
-        if(id >= rt_table.size())
+        if(id >= real_time_updates.size())
         {
                 fmt::print(
                     stderr,
                     "handle_received(): Received id out of bounds: {}. Size is: {}.\n",
                     id,
-                    rt_table.size()
+                    real_time_updates.size()
                 );
 
                 return;
         }
 
-        do_response(rt_table[id]);
-        update_status();
+        run_update(real_time_updates[id]);
+        update_screen();
 }
 
 void DWMSTATUS_NORETURN
@@ -512,7 +513,6 @@ run()
                 }
 
                 std::uint32_t id;
-
                 ret = read(client_fd, &id, sizeof(id));
                 if(ret < 0)
                 {
