@@ -1,6 +1,5 @@
 #include <array>
 #include <tuple>
-#include <numeric>
 #include <fmt/core.h>
 #include <unistd.h>
 #include <signal.h>
@@ -55,7 +54,7 @@ static constexpr int STATUS_FMT_LEN = std::char_traits<char>::length(STATUS_FMT.
 /* struct definitions */
 struct FieldBuffer
 {
-        std::uint32_t length = 0;
+        std::uint32_t length           = 0;
         char data[BUFFER_MAX_SIZE + 1] = {};
 };
 
@@ -486,7 +485,6 @@ run()
 
         struct sockaddr_un name;
         memset(&name, 0, sizeof(name));
-
         name.sun_family = AF_UNIX;
         strncpy(name.sun_path, SOCKET_PATH.data(), sizeof(name.sun_path) - 1);
 
