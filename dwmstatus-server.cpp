@@ -32,7 +32,7 @@ enum {
 static constexpr int BUFFER_MAX_SIZE = 255;
 static constexpr int ROOT_BUFFER_MAX_SIZE = R_SIZE * BUFFER_MAX_SIZE;
 static constexpr int MAX_REQUESTS = 10;
-static constexpr std::string_view SOCKET_NAME = "/tmp/dwmstatus.socket";
+static constexpr std::string_view SOCKET_PATH = "/tmp/dwmstatus.socket";
 static constexpr auto STATUS_FMT = []()
 {
         std::string str = "[{}";
@@ -470,7 +470,7 @@ handle_received(const std::uint32_t id)
 void DWMSTATUS_NORETURN
 cleanup_and_exit(const int)
 {
-        unlink(SOCKET_NAME.data());
+        unlink(SOCKET_PATH.data());
         _exit(EXIT_SUCCESS);
 }
 
@@ -487,7 +487,7 @@ run()
         memset(&name, 0, sizeof(name));
 
         name.sun_family = AF_UNIX;
-        strncpy(name.sun_path, SOCKET_NAME.data(), sizeof(name.sun_path) - 1);
+        strncpy(name.sun_path, SOCKET_PATH.data(), sizeof(name.sun_path) - 1);
 
         int ret = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
         if(ret < 0)
@@ -537,7 +537,7 @@ run()
         }
 
         close(sock_fd);
-        unlink(SOCKET_NAME.data());
+        unlink(SOCKET_PATH.data());
 }
 
 int
