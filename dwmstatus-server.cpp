@@ -380,8 +380,21 @@ terminator()
 void
 setup()
 {
-        signal(SIGTERM, &cleanup_and_exit);
-        signal(SIGINT,  &cleanup_and_exit);
+        struct sigaction act;
+        act.sa_handler = &cleanup_and_exit;
+        sigemptyset(&act.sa_mask);
+        act.sa_flags = 0;
+
+        for(const int sig : {SIGTERM, SIGINT})
+        {
+                struct sigaction old;
+                sigaction(sig, nullptr, &old);
+
+                if(old.sa_handler != SIG_IGN)
+                {
+                        sigaction(sig, &act, nullptr);
+                }
+        }
 
 #ifndef NO_X11
         dpy = XOpenDisplay(nullptr);
