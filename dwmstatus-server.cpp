@@ -13,7 +13,8 @@
 /* macros */
 #define DWMSTATUS_NORETURN    __attribute__((__noreturn__))
 #define DWMSTATUS_UNREACHABLE __builtin_unreachable()
-#define SHCMD(cmd)            {"/bin/sh", "-c", cmd, nullptr}
+#define SHELL                 "/bin/sh"
+#define SHCMD(cmd)            {SHELL, "-c", cmd, nullptr}
 
 /* enums */
 enum {
