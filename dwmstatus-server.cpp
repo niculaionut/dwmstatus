@@ -418,8 +418,10 @@ init_signals()
         struct sigaction act;
         memset(&act, 0, sizeof(act));
         act.sa_handler = &cleanup_and_exit;
+
         rc = sigemptyset(&act.sa_mask);
         die(rc < 0, "sigemptyset");
+
         act.sa_flags = 0;
 
         for(const int sig : {SIGTERM, SIGINT, SIGHUP})
@@ -507,7 +509,7 @@ handle_received(const std::uint32_t id)
 }
 
 void DWMSTATUS_NORETURN
-cleanup_and_exit(const int sig)
+cleanup_and_exit(const int)
 {
         unlink(SOCKET_PATH);
         _exit(EXIT_SUCCESS);
