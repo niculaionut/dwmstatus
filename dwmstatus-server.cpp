@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #ifndef NO_X11
 #include <X11/Xlib.h>
 #endif
@@ -12,6 +13,7 @@
 /* macros */
 #define DWMSTATUS_NORETURN    __attribute__((__noreturn__))
 #define DWMSTATUS_UNREACHABLE __builtin_unreachable()
+#define SHCMD(cmd)            {"/bin/sh", "-c", cmd, nullptr}
 
 /* enums */
 enum {
@@ -100,9 +102,12 @@ template<const auto& updates, std::size_t... indexes>
 static void run_meta_update();
 
 /* function declarations */
-static int  get_named_socket();
+static void die(const bool cond, const char* why);
+static ssize_t read_all(const int fd, void* buffer, const size_t nbytes);
+static void create_child(const char* cmd, const int pipe_fds[2]);
+static int get_named_socket();
 static void perror_exit(const char* why) DWMSTATUS_NORETURN;
-static int  write_cmd_output(const char* cmd, FieldBuffer* field_buffer);
+static int read_cmd_output(const char* cmd, FieldBuffer* field_buffer);
 static void run_update(const FieldUpdate* field_update);
 static void toggle_lang(FieldBuffer* field_buffer);
 static void toggle_cpu_gov(FieldBuffer* field_buffer);
@@ -189,12 +194,61 @@ run_meta_update()
 }
 
 /* function definitions */
+void
+die(const bool cond, const char* why)
+{
+        if(cond)
+                perror_exit(why);
+}
+
+ssize_t
+read_all(const int fd, void* buffer, const size_t nbytes)
+{
+        char* buf = (char*)buffer;
+        size_t read_so_far = 0;
+
+        while(read_so_far < nbytes)
+        {
+                const ssize_t rc = read(fd, buf + read_so_far, nbytes - read_so_far);
+                if(rc < 0)
+                        return rc;
+
+                if(rc == 0)
+                        break;
+
+                read_so_far += rc;
+        }
+
+        return read_so_far;
+}
+
+void
+create_child(const char* cmd, const int pipe_fds[2])
+{
+        const pid_t child_pid = fork();
+        die(child_pid < 0, "fork");
+
+        if(child_pid == 0)
+        {
+                int rc = close(pipe_fds[0]);
+                if(rc < 0)
+                        exit(EXIT_FAILURE);
+
+                rc = dup2(pipe_fds[1], STDOUT_FILENO);
+                if(rc < 0)
+                        exit(EXIT_FAILURE);
+
+                const char* new_argv[] = SHCMD(cmd);
+                execv(new_argv[0], (char**)new_argv);
+                exit(EXIT_FAILURE);
+        }
+}
+
 int
 get_named_socket()
 {
         const int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-        if(sock_fd < 0)
-                perror_exit("socket");
+        die(sock_fd < 0, "socket");
 
         struct sockaddr_un name;
         memset(&name, 0, sizeof(name));
@@ -202,8 +256,7 @@ get_named_socket()
         strncpy(name.sun_path, SOCKET_PATH, sizeof(name.sun_path) - 1);
 
         const int rc = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
-        if(rc < 0)
-                perror_exit("bind");
+        die(rc < 0, "bind");
 
         return sock_fd;
 }
@@ -215,32 +268,44 @@ perror_exit(const char* why)
         exit(EXIT_FAILURE);
 }
 
-int
-write_cmd_output(const char* cmd, FieldBuffer* field_buffer)
+int read_cmd_output(const char* cmd, FieldBuffer* field_buffer)
 {
-        FILE* pipe = popen(cmd, "r");
-        if(pipe == nullptr)
-                perror_exit("popen");
+        int rc;
 
-        char* buffer = field_buffer->data;
-        buffer[0] = '\0';
-        field_buffer->length = 0;
+        int pipe_fds[2];
+        rc = pipe(pipe_fds);
+        die(rc < 0, "pipe");
 
-        if(fgets(buffer, BUFFER_MAX_SIZE + 1, pipe) != nullptr)
+        create_child(cmd, pipe_fds);
+        rc = close(pipe_fds[1]);
+        die(rc < 0, "close");
+
+        auto& buf = field_buffer->data;
+        auto& len = field_buffer->length;
+
+        buf[0] = '\0';
+        len = 0;
+        const ssize_t b_read = read_all(pipe_fds[0], buf, BUFFER_MAX_SIZE);
+        die(b_read < 0, "read");
+
+        buf[b_read] = '\0';
+        len = b_read;
+
+        rc = close(pipe_fds[0]);
+        if(rc < 0)
         {
-                auto len = strlen(buffer);
-
-                /* check for trailing newline and delete it */
-                if(len > 0 && buffer[len - 1] == '\n')
-                {
-                        buffer[len - 1] = '\0';
-                        --len;
-                }
-
-                field_buffer->length = len;
+                wait(nullptr);
+                return rc;
         }
 
-        return pclose(pipe);
+        rc = wait(nullptr);
+        if(rc < 0)
+                return rc;
+
+        if(len > 0 && buf[len - 1] == '\n')
+                buf[--len] = '\0';
+
+        return 0;
 }
 
 void
@@ -251,7 +316,8 @@ run_update(const FieldUpdate* field_update)
         case FieldUpdate::Type::Shell:
         {
                 auto& args = field_update->args.shell;
-                write_cmd_output(args.command, args.field_buffer);
+                const int rc = read_cmd_output(args.command, args.field_buffer);
+                die(rc < 0, "read_cmd_output");
 
                 break;
         }
@@ -355,22 +421,19 @@ init_signals()
         memset(&act, 0, sizeof(act));
         act.sa_handler = &cleanup_and_exit;
         rc = sigemptyset(&act.sa_mask);
-        if(rc < 0)
-                perror_exit("sigemptyset");
+        die(rc < 0, "sigemptyset");
         act.sa_flags = 0;
 
         for(const int sig : {SIGTERM, SIGINT, SIGHUP})
         {
                 struct sigaction old;
                 rc = sigaction(sig, nullptr, &old);
-                if(rc < 0)
-                        perror_exit("sigaction");
+                die(rc < 0, "sigaction");
 
                 if(old.sa_handler != SIG_IGN)
                 {
                         rc = sigaction(sig, &act, nullptr);
-                        if(rc < 0)
-                                perror_exit("sigaction");
+                        die(rc < 0, "sigaction");
                 }
         }
 }
