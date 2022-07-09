@@ -509,7 +509,6 @@ handle_received(const std::uint32_t id)
 void DWMSTATUS_NORETURN
 cleanup_and_exit(const int sig)
 {
-        fmt::print(stderr, "dwmstatus: signal that lead to death: {}\n", sig);
         unlink(SOCKET_PATH);
         _exit(EXIT_SUCCESS);
 }
