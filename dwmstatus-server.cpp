@@ -385,7 +385,7 @@ setup()
         sigemptyset(&act.sa_mask);
         act.sa_flags = 0;
 
-        for(const int sig : {SIGTERM, SIGINT})
+        for(const int sig : {SIGTERM, SIGINT, SIGHUP})
         {
                 struct sigaction old;
                 sigaction(sig, nullptr, &old);
@@ -464,8 +464,9 @@ handle_received(const std::uint32_t id)
 }
 
 void DWMSTATUS_NORETURN
-cleanup_and_exit(const int)
+cleanup_and_exit(const int sig)
 {
+        fmt::print(stderr, "dwmstatus: signal that lead to death: {}\n", sig);
         unlink(SOCKET_PATH.data());
         _exit(EXIT_SUCCESS);
 }

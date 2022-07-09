@@ -24,7 +24,6 @@ int main(const int argc, const char* argv[])
 
         struct sockaddr_un addr;
         memset(&addr, 0, sizeof(addr));
-
         addr.sun_family = AF_UNIX;
         strncpy(addr.sun_path, SOCKET_PATH.data(), sizeof(addr.sun_path) - 1);
 
@@ -39,7 +38,7 @@ int main(const int argc, const char* argv[])
                 return EXIT_FAILURE;
         }
 
-        const int ret = sendto(
+        const ssize_t ret = sendto(
                 server_fd,
                 &num,
                 sizeof(num),
