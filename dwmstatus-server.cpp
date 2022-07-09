@@ -280,16 +280,15 @@ int read_cmd_output(const char* cmd, FieldBuffer* field_buffer)
         rc = close(pipe_fds[1]);
         die(rc < 0, "close");
 
-        auto& buf = field_buffer->data;
-        auto& len = field_buffer->length;
+        auto& [len, buf] = *field_buffer;
 
-        buf[0] = '\0';
-        len = 0;
+        buf[len = 0] = '\0';
         const ssize_t b_read = read_all(pipe_fds[0], buf, BUFFER_MAX_SIZE);
         die(b_read < 0, "read");
 
-        buf[b_read] = '\0';
-        len = b_read;
+        buf[len = b_read] = '\0';
+        if(len > 0 && buf[len - 1] == '\n')
+                buf[--len] = '\0';
 
         rc = close(pipe_fds[0]);
         if(rc < 0)
@@ -301,9 +300,6 @@ int read_cmd_output(const char* cmd, FieldBuffer* field_buffer)
         rc = wait(nullptr);
         if(rc < 0)
                 return rc;
-
-        if(len > 0 && buf[len - 1] == '\n')
-                buf[--len] = '\0';
 
         return 0;
 }
