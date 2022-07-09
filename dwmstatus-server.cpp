@@ -113,7 +113,7 @@ static void init_x();
 static void init_statusbar();
 static void update_screen();
 static void handle_received(const std::uint32_t id);
-static void cleanup_and_exit(const int) DWMSTATUS_NORETURN;
+static void cleanup_and_exit(const int sig) DWMSTATUS_NORETURN;
 static void run();
 
 /* global variables */
