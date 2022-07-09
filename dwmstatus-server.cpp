@@ -81,6 +81,7 @@ template<const auto& updates, std::size_t... indexes>
 static void run_meta_update();
 
 /* function declarations */
+static int  get_named_socket(const std::string_view sv);
 static void perror_exit(const char* why) DWMSTATUS_NORETURN;
 static int  write_cmd_output(const char* cmd, FieldBuffer* field_buffer);
 static void run_update(const FieldUpdate* field_update);
@@ -237,6 +238,29 @@ run_meta_update()
 }
 
 /* function definitions */
+int
+get_named_socket(const std::string_view sv)
+{
+        const int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+        if(sock_fd < 0)
+        {
+                perror_exit("socket");
+        }
+
+        struct sockaddr_un name;
+        memset(&name, 0, sizeof(name));
+        name.sun_family = AF_UNIX;
+        strncpy(name.sun_path, sv.data(), sizeof(name.sun_path) - 1);
+
+        const int rc = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
+        if(rc < 0)
+        {
+                perror_exit("bind");
+        }
+
+        return sock_fd;
+}
+
 void DWMSTATUS_NORETURN
 perror_exit(const char* why)
 {
@@ -474,22 +498,7 @@ cleanup_and_exit(const int sig)
 void
 run()
 {
-        const int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-        if(sock_fd < 0)
-        {
-                perror_exit("socket");
-        }
-
-        struct sockaddr_un name;
-        memset(&name, 0, sizeof(name));
-        name.sun_family = AF_UNIX;
-        strncpy(name.sun_path, SOCKET_PATH.data(), sizeof(name.sun_path) - 1);
-
-        int ret = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
-        if(ret < 0)
-        {
-                perror_exit("bind");
-        }
+        const int sock_fd = get_named_socket(SOCKET_PATH);
 
         setup();
         init_statusbar();
@@ -497,19 +506,20 @@ run()
         while(running)
         {
                 std::uint32_t id;
-                ret = read(sock_fd, &id, sizeof(id));
-                if(ret < 0)
+
+                const auto rc = read(sock_fd, &id, sizeof(id));
+                if(rc < 0)
                 {
                         unlink(SOCKET_PATH.data());
                         perror_exit("read");
                 }
 
-                if(ret != sizeof(id))
+                if(rc != sizeof(id))
                 {
                         fmt::print(
                             stderr,
                             "read(): Received {} out of {} bytes needed for table index\n",
-                            ret,
+                            rc,
                             sizeof(id)
                         );
                 }
