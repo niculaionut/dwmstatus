@@ -49,6 +49,10 @@ struct FieldUpdate
                 Meta
         };
 
+        constexpr FieldUpdate(const char* command, FieldBuffer* field_buffer);
+        constexpr FieldUpdate(void (*fptr)(FieldBuffer*), FieldBuffer* field_buffer);
+        constexpr FieldUpdate(void (*fptr)());
+
         struct ShellArgs {
                 const char* command;
                 FieldBuffer* field_buffer;
@@ -71,10 +75,25 @@ struct FieldUpdate
         } args;
 };
 
-/* constexpr function declarations */
-static constexpr FieldUpdate make_shell_update(const char* command, FieldBuffer* buffer);
-static constexpr FieldUpdate make_builtin_update(void (*fptr)(FieldBuffer*), FieldBuffer* buffer);
-static constexpr FieldUpdate make_meta_update(void (*fptr)());
+constexpr FieldUpdate::FieldUpdate(const char* command, FieldBuffer* field_buffer)
+{
+        type                    = Type::Shell;
+        args.shell.command      = command;
+        args.shell.field_buffer = field_buffer;
+}
+
+constexpr FieldUpdate::FieldUpdate(void (*fptr)(FieldBuffer*), FieldBuffer* field_buffer)
+{
+        type                      = Type::Builtin;
+        args.builtin.fptr         = fptr;
+        args.builtin.field_buffer = field_buffer;
+}
+
+constexpr FieldUpdate::FieldUpdate(void (*fptr)())
+{
+        type           = Type::Meta;
+        args.meta.fptr = fptr;
+}
 
 /* template function declarations */
 template<const auto& updates, std::size_t... indexes>
@@ -105,119 +124,50 @@ static int screen;
 static Window root;
 #endif
 
-/* constexpr function definitions */
-constexpr FieldUpdate
-make_shell_update(const char* command, FieldBuffer* field_buffer)
-{
-        FieldUpdate f;
-
-        f.type                    = FieldUpdate::Type::Shell;
-        f.args.shell.command      = command;
-        f.args.shell.field_buffer = field_buffer;
-
-        return f;
-}
-
-constexpr FieldUpdate
-make_builtin_update(void (*fptr)(FieldBuffer*), FieldBuffer* field_buffer)
-{
-        FieldUpdate f;
-
-        f.type                      = FieldUpdate::Type::Builtin;
-        f.args.builtin.fptr         = fptr;
-        f.args.builtin.field_buffer = field_buffer;
-
-        return f;
-}
-
-constexpr FieldUpdate
-make_meta_update(void (*fptr)())
-{
-        FieldUpdate f;
-
-        f.type           = FieldUpdate::Type::Meta;
-        f.args.meta.fptr = fptr;
-
-        return f;
-}
-
 /* field configs */
-static constexpr auto shell_updates = []()
-{
-        std::array arr = std::to_array<std::pair<const char*, FieldBuffer*>>({
-            {   /* time */
+static constexpr std::array shell_updates = std::to_array<FieldUpdate>({
+        {       /* time */
                 R"(date +%H:%M:%S)",        /* shell command */
                 &field_buffers[R_TIME]      /* reference to root buffer */
-            },
-            {   /* sys load*/
+        },
+        {       /* sys load*/
                 R"(uptime | grep -wo "average: .*," | cut --delimiter=' ' -f2 | head -c4)",
                 &field_buffers[R_LOAD]
-            },
-            {   /* cpu temp*/
+        },
+        {       /* cpu temp*/
                 R"(sensors | grep -F "Core 0" | awk '{print $3}' | cut -c2-5)",
                 &field_buffers[R_TEMP]
-            },
-            {   /* volume */
+        },
+        {       /* volume */
                 R"(amixer sget Master | tail -n1 | get-from-to '[' ']' '--amixer')",
                 &field_buffers[R_VOL]
-            },
-            {   /* memory usage */
+        },
+        {       /* memory usage */
                 R"(xss-get-mem)",
                 &field_buffers[R_MEM]
-            },
-            {   /* date */
+        },
+        {       /* date */
                 R"(date "+%d.%m.%Y")",
                 &field_buffers[R_DATE]
-            },
-            {   /* weather */
+        },
+        {       /* weather */
                 R"(curl wttr.in/Bucharest?format=1 2>/dev/null | get-from '+')",
                 &field_buffers[R_WTH]
-            }
-        });
-
-        std::array<FieldUpdate, arr.size()> field_updates;
-        for(std::size_t i = 0; i < field_updates.size(); ++i)
-        {
-                field_updates[i] = make_shell_update(arr[i].first, arr[i].second);
         }
+});
 
-        return field_updates;
-}();
+static constexpr std::array builtin_updates = std::to_array<FieldUpdate>({
+       /* pointer to function   reference to root buffer */
+        { &toggle_lang,         &field_buffers[R_LANG] },
+        { &toggle_cpu_gov,      &field_buffers[R_GOV]  },
+        { &toggle_mic,          &field_buffers[R_MIC]  }
+});
 
-static constexpr auto builtin_updates = []()
-{
-        std::array arr = std::to_array<std::pair<void(*)(FieldBuffer*), FieldBuffer*>>({
-           /* pointer to function   reference to root buffer */
-            { &toggle_lang,         &field_buffers[R_LANG] },
-            { &toggle_cpu_gov,      &field_buffers[R_GOV]  },
-            { &toggle_mic,          &field_buffers[R_MIC]  }
-        });
-
-        std::array<FieldUpdate, arr.size()> field_updates;
-        for(std::size_t i = 0; i < field_updates.size(); ++i)
-        {
-                field_updates[i] = make_builtin_update(arr[i].first, arr[i].second);
-        }
-
-        return field_updates;
-}();
-
-static constexpr auto meta_updates = []()
-{
-        std::array arr = std::to_array<void (*)()>({
-           /* pointer to function */
-            &run_meta_update<shell_updates, 0, 1, 2, 4>,
-            &terminator
-        });
-
-        std::array<FieldUpdate, arr.size()> field_updates;
-        for(std::size_t i = 0; i < field_updates.size(); ++i)
-        {
-                field_updates[i] = make_meta_update(arr[i]);
-        }
-
-        return field_updates;
-}();
+static constexpr std::array meta_updates = std::to_array<FieldUpdate>({
+     /* pointer to function */
+        &run_meta_update<shell_updates, 0, 1, 2, 4>,
+        &terminator
+});
 
 static constexpr auto real_time_updates = std::to_array<const FieldUpdate*>({
         &meta_updates[1],    /* 0 */
