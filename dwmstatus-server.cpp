@@ -352,6 +352,7 @@ init_signals()
         int rc;
 
         struct sigaction act;
+        memset(&act, 0, sizeof(act));
         act.sa_handler = &cleanup_and_exit;
         rc = sigemptyset(&act.sa_mask);
         if(rc < 0)
