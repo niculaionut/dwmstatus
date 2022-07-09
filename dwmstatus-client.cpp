@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-static constexpr std::string_view SOCKET_PATH = "/tmp/dwmstatus.socket";
+static constexpr const char* SOCKET_PATH = "/tmp/dwmstatus.socket";
 
 int main(const int argc, const char* argv[])
 {
@@ -25,7 +25,7 @@ int main(const int argc, const char* argv[])
         struct sockaddr_un addr;
         memset(&addr, 0, sizeof(addr));
         addr.sun_family = AF_UNIX;
-        strncpy(addr.sun_path, SOCKET_PATH.data(), sizeof(addr.sun_path) - 1);
+        strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
 
         std::uint32_t num;
         try
