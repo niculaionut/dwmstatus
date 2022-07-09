@@ -29,9 +29,9 @@ enum {
 };
 
 /* global constexpr variables */
-static constexpr int BUFFER_MAX_SIZE = 255;
-static constexpr int ROOT_BUFFER_MAX_SIZE = R_SIZE * BUFFER_MAX_SIZE;
-static constexpr std::string_view SOCKET_PATH = "/tmp/dwmstatus.socket";
+static constexpr int BUFFER_MAX_SIZE         = 255;
+static constexpr int ROOT_BUFFER_MAX_SIZE    = R_SIZE * BUFFER_MAX_SIZE;
+static constexpr const char* SOCKET_PATH     = "/tmp/dwmstatus.socket";
 static constexpr std::string_view STATUS_FMT = "[{} |{} |{} |{} |{} |{} |{} |{} |{} |{}]";
 
 /* struct definitions */
@@ -100,7 +100,7 @@ template<const auto& updates, std::size_t... indexes>
 static void run_meta_update();
 
 /* function declarations */
-static int  get_named_socket(const std::string_view sv);
+static int  get_named_socket();
 static void perror_exit(const char* why) DWMSTATUS_NORETURN;
 static int  write_cmd_output(const char* cmd, FieldBuffer* field_buffer);
 static void run_update(const FieldUpdate* field_update);
@@ -189,7 +189,7 @@ run_meta_update()
 
 /* function definitions */
 int
-get_named_socket(const std::string_view sv)
+get_named_socket()
 {
         const int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
         if(sock_fd < 0)
@@ -200,7 +200,7 @@ get_named_socket(const std::string_view sv)
         struct sockaddr_un name;
         memset(&name, 0, sizeof(name));
         name.sun_family = AF_UNIX;
-        strncpy(name.sun_path, sv.data(), sizeof(name.sun_path) - 1);
+        strncpy(name.sun_path, SOCKET_PATH, sizeof(name.sun_path) - 1);
 
         const int rc = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
         if(rc < 0)
@@ -441,14 +441,14 @@ void DWMSTATUS_NORETURN
 cleanup_and_exit(const int sig)
 {
         fmt::print(stderr, "dwmstatus: signal that lead to death: {}\n", sig);
-        unlink(SOCKET_PATH.data());
+        unlink(SOCKET_PATH);
         _exit(EXIT_SUCCESS);
 }
 
 void
 run()
 {
-        const int sock_fd = get_named_socket(SOCKET_PATH);
+        const int sock_fd = get_named_socket();
 
         setup();
         init_statusbar();
@@ -460,7 +460,7 @@ run()
                 const auto rc = read(sock_fd, &id, sizeof(id));
                 if(rc < 0)
                 {
-                        unlink(SOCKET_PATH.data());
+                        unlink(SOCKET_PATH);
                         perror_exit("read");
                 }
 
@@ -480,7 +480,7 @@ run()
         }
 
         close(sock_fd);
-        unlink(SOCKET_PATH.data());
+        unlink(SOCKET_PATH);
 }
 
 int
