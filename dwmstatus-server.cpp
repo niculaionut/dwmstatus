@@ -269,7 +269,8 @@ perror_exit(const char* why)
         exit(EXIT_FAILURE);
 }
 
-int read_cmd_output(const char* cmd, FieldBuffer* field_buffer)
+int
+read_cmd_output(const char* cmd, FieldBuffer* field_buffer)
 {
         int rc;
 
