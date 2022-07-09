@@ -108,7 +108,8 @@ static void toggle_lang(FieldBuffer* field_buffer);
 static void toggle_cpu_gov(FieldBuffer* field_buffer);
 static void toggle_mic(FieldBuffer* field_buffer);
 static void terminator();
-static void setup();
+static void init_signals();
+static void init_x();
 static void init_statusbar();
 static void update_screen();
 static void handle_received(const std::uint32_t id);
@@ -193,9 +194,7 @@ get_named_socket()
 {
         const int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
         if(sock_fd < 0)
-        {
                 perror_exit("socket");
-        }
 
         struct sockaddr_un name;
         memset(&name, 0, sizeof(name));
@@ -204,9 +203,7 @@ get_named_socket()
 
         const int rc = bind(sock_fd, (const struct sockaddr*)&name, sizeof(name));
         if(rc < 0)
-        {
                 perror_exit("bind");
-        }
 
         return sock_fd;
 }
@@ -223,9 +220,7 @@ write_cmd_output(const char* cmd, FieldBuffer* field_buffer)
 {
         FILE* pipe = popen(cmd, "r");
         if(pipe == nullptr)
-        {
                 perror_exit("popen");
-        }
 
         char* buffer = field_buffer->data;
         buffer[0] = '\0';
@@ -352,24 +347,36 @@ terminator()
 }
 
 void
-setup()
+init_signals()
 {
+        int rc;
+
         struct sigaction act;
         act.sa_handler = &cleanup_and_exit;
-        sigemptyset(&act.sa_mask);
+        rc = sigemptyset(&act.sa_mask);
+        if(rc < 0)
+                perror_exit("sigemptyset");
         act.sa_flags = 0;
 
         for(const int sig : {SIGTERM, SIGINT, SIGHUP})
         {
                 struct sigaction old;
-                sigaction(sig, nullptr, &old);
+                rc = sigaction(sig, nullptr, &old);
+                if(rc < 0)
+                        perror_exit("sigaction");
 
                 if(old.sa_handler != SIG_IGN)
                 {
-                        sigaction(sig, &act, nullptr);
+                        rc = sigaction(sig, &act, nullptr);
+                        if(rc < 0)
+                                perror_exit("sigaction");
                 }
         }
+}
 
+void
+init_x()
+{
 #ifndef NO_X11
         dpy = XOpenDisplay(nullptr);
         if(!dpy)
@@ -450,7 +457,8 @@ run()
 {
         const int sock_fd = get_named_socket();
 
-        setup();
+        init_signals();
+        init_x();
         init_statusbar();
 
         while(running)
