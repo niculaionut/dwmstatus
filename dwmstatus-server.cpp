@@ -443,7 +443,7 @@ init_x()
 {
 #ifndef NO_X11
         dpy = XOpenDisplay(nullptr);
-        if(!dpy)
+        if(dpy == nullptr)
         {
                 fmt::print(stderr, "XOpenDisplay(): Failed to open display\n");
                 exit(EXIT_FAILURE);
