@@ -28,6 +28,7 @@ enum {
         R_LANG,
         R_WTH,
         R_DATE,
+        R_BAT,
         R_SIZE
 };
 
@@ -35,7 +36,7 @@ enum {
 static constexpr int BUFFER_MAX_SIZE         = 255;
 static constexpr int ROOT_BUFFER_MAX_SIZE    = R_SIZE * BUFFER_MAX_SIZE;
 static constexpr const char* SOCKET_PATH     = "/tmp/dwmstatus.socket";
-static constexpr std::string_view STATUS_FMT = "[{} |{} |{} |{} |{} |{} |{} |{} |{} |{}]";
+static constexpr std::string_view STATUS_FMT = "[{} |{} |{} |{} |{} |{} |{} |{} |{} |{} |{}]";
 
 /* struct definitions */
 struct FieldBuffer
@@ -158,8 +159,12 @@ static constexpr std::array shell_updates = std::to_array<FieldUpdate>({
                 &field_buffers[R_DATE]
         },
         {       /* weather */
-                R"(curl wttr.in/Bucharest?format=1 2>/dev/null | get-from '+')",
+                R"(curl --max-time 0.5 wttr.in/Bucharest?format=1 2>/dev/null | get-from '+')",
                 &field_buffers[R_WTH]
+        },
+        {       /* weather */
+                R"(cat /sys/class/power_supply/BAT0/capacity)",
+                &field_buffers[R_BAT]
         }
 });
 
@@ -172,7 +177,7 @@ static constexpr std::array builtin_updates = std::to_array<FieldUpdate>({
 
 static constexpr std::array meta_updates = std::to_array<FieldUpdate>({
      /* pointer to function */
-        &run_meta_update<shell_updates, 0, 1, 2, 4>,
+        &run_meta_update<shell_updates, 0, 1, 2, 4, 7>,
         &terminator
 });
 
@@ -243,6 +248,9 @@ create_child(const char* cmd, const int pipe_fds[2])
                 execv(new_argv[0], (char**)new_argv);
                 exit(EXIT_FAILURE);
         }
+
+        int rc = close(pipe_fds[1]);
+        die(rc < 0, "close");
 }
 
 int
@@ -274,24 +282,27 @@ read_cmd_output(const char* cmd, FieldBuffer* field_buffer)
 {
         int rc;
 
+        /* create pipe */
         int pipe_fds[2];
         rc = pipe(pipe_fds);
         die(rc < 0, "pipe");
 
+        /* create child */
         create_child(cmd, pipe_fds);
-        rc = close(pipe_fds[1]);
-        die(rc < 0, "close");
 
         auto& [len, buf] = *field_buffer;
 
+        /* read all characters from the pipe */
         buf[len = 0] = '\0';
         const ssize_t b_read = read_all(pipe_fds[0], buf, BUFFER_MAX_SIZE);
         die(b_read < 0, "read");
 
+        /* null-terminate and delete trailing newline */
         buf[len = b_read] = '\0';
         if(len > 0 && buf[len - 1] == '\n')
                 buf[--len] = '\0';
 
+        /* cleanup */
         rc = close(pipe_fds[0]);
         if(rc < 0)
         {
